@@ -472,12 +472,98 @@ def get_sources():
     return {"sources": list_local_sources()}
 
 
+def normalize_exam_question_fields(question: dict, index: int) -> dict:
+    normalized = dict(question)
+    repaired_fields = []
+    question_type = normalized.get("question_type")
+
+    if question_type == "multiple_choice":
+        options = normalized.get("options")
+        expected_answer = normalized.get("expected_answer")
+        if isinstance(options, list) and isinstance(expected_answer, str):
+            matching_options = [
+                option_index
+                for option_index, option in enumerate(options)
+                if isinstance(option, str)
+                and option.strip().casefold() == expected_answer.strip().casefold()
+            ]
+            if len(matching_options) == 1 and normalized.get("correct_index") != matching_options[0]:
+                normalized["correct_index"] = matching_options[0]
+                repaired_fields.append("correct_index")
+        for field, value in (
+            ("accepted_answers", []),
+            ("max_marks", 1),
+            ("grading_criteria", ""),
+        ):
+            if normalized.get(field) != value:
+                normalized[field] = value
+                repaired_fields.append(field)
+    elif question_type == "fill_blank":
+        if normalized.get("options") != []:
+            normalized["options"] = []
+            repaired_fields.append("options")
+        if normalized.get("correct_index") is not None:
+            normalized["correct_index"] = None
+            repaired_fields.append("correct_index")
+        if normalized.get("max_marks") != 1:
+            normalized["max_marks"] = 1
+            repaired_fields.append("max_marks")
+        if normalized.get("grading_criteria") != "":
+            normalized["grading_criteria"] = ""
+            repaired_fields.append("grading_criteria")
+        expected_answer = normalized.get("expected_answer")
+        accepted_answers = normalized.get("accepted_answers")
+        if isinstance(expected_answer, str) and expected_answer.strip():
+            if not isinstance(accepted_answers, list):
+                accepted_answers = []
+            if not any(
+                isinstance(answer, str)
+                and answer.strip().casefold() == expected_answer.strip().casefold()
+                for answer in accepted_answers
+            ):
+                accepted_answers.append(expected_answer.strip())
+                repaired_fields.append("accepted_answers")
+            normalized["accepted_answers"] = accepted_answers
+    elif question_type == "reflective":
+        for field, value in (
+            ("options", []),
+            ("correct_index", None),
+            ("accepted_answers", []),
+        ):
+            if normalized.get(field) != value:
+                normalized[field] = value
+                repaired_fields.append(field)
+        if type(normalized.get("max_marks")) is not int or not 2 <= normalized["max_marks"] <= 5:
+            normalized["max_marks"] = 3
+            repaired_fields.append("max_marks")
+        criteria = normalized.get("grading_criteria")
+        if not isinstance(criteria, str) or not criteria.strip():
+            expected_answer = normalized.get("expected_answer")
+            if isinstance(expected_answer, str) and expected_answer.strip():
+                normalized["grading_criteria"] = (
+                    "Award up to "
+                    f"{normalized['max_marks']} marks for these key ideas: "
+                    f"{expected_answer.strip()[:500]}. Give partial credit for supported points."
+                )
+                repaired_fields.append("grading_criteria")
+
+    if repaired_fields:
+        logger.warning(
+            "Normalized required fields in generated exam question %s: %s",
+            index + 1,
+            ", ".join(sorted(set(repaired_fields))),
+        )
+    return normalized
+
+
 @app.post("/exam")
 async def create_exam(request: ExamRequest):
     source_query = f"{request.subject} {request.topic}"
     sources = await run_in_threadpool(find_relevant_sources, source_query, 5)
     questions = None
     validation_feedback = ""
+    question_feedback_by_index = None
+    previous_candidate = None
     for attempt in range(2):
         try:
             generation_args = (
@@ -488,13 +574,13 @@ async def create_exam(request: ExamRequest):
                 request.question_count,
                 sources,
             )
+            generation_kwargs = {}
             if validation_feedback:
-                generated = await generate_exam_questions(
-                    *generation_args,
-                    validation_feedback=validation_feedback,
-                )
-            else:
-                generated = await generate_exam_questions(*generation_args)
+                generation_kwargs["validation_feedback"] = validation_feedback
+            if question_feedback_by_index:
+                generation_kwargs["question_feedback_by_index"] = question_feedback_by_index
+                generation_kwargs["question_indices"] = sorted(question_feedback_by_index)
+            generated = await generate_exam_questions(*generation_args, **generation_kwargs)
         except httpx.HTTPError as error:
             response_status = error.response.status_code if isinstance(error, httpx.HTTPStatusError) else None
             logger.warning(
@@ -521,10 +607,30 @@ async def create_exam(request: ExamRequest):
                 ) from error
             continue
         try:
-            candidate = [
-                ExamQuestion.model_validate(question).model_dump()
-                for question in generated["questions"]
+            raw_questions = generated["questions"]
+            if not isinstance(raw_questions, list):
+                raise TypeError("questions must be a list")
+            target_indices = (
+                sorted(question_feedback_by_index)
+                if question_feedback_by_index
+                else list(range(len(raw_questions)))
+            )
+            if len(raw_questions) != len(target_indices):
+                raise ValueError("the regenerated question count did not match the requested questions")
+            generated_candidate = [
+                ExamQuestion.model_validate(
+                    normalize_exam_question_fields(question, question_index)
+                    if isinstance(question, dict)
+                    else question
+                ).model_dump()
+                for question_index, question in zip(target_indices, raw_questions)
             ]
+            if question_feedback_by_index and previous_candidate is not None:
+                candidate = previous_candidate.copy()
+                for question_index, question in zip(target_indices, generated_candidate):
+                    candidate[question_index] = question
+            else:
+                candidate = generated_candidate
         except (KeyError, TypeError, ValidationError) as error:
             details = (
                 error.errors(include_input=False)
@@ -568,36 +674,50 @@ async def create_exam(request: ExamRequest):
                 )
             continue
 
+        previous_candidate = candidate
         objective_questions = [
             {"question_id": index, **question}
             for index, question in enumerate(candidate)
             if question["question_type"] != "reflective"
         ]
-        try:
-            verification = await verify_exam_questions(
-                request.subject,
-                request.topic,
-                request.class_level,
-                objective_questions,
-            )
-        except httpx.HTTPError as error:
-            raise HTTPException(
-                status_code=502,
-                detail="Could not verify exam answers with the local model. Check Ollama and try again.",
-            ) from error
-        except (ValueError, TypeError, KeyError) as error:
-            logger.warning(
-                "Local exam verification attempt %s returned an invalid response: %s",
-                attempt + 1,
-                type(error).__name__,
-            )
-            validation_feedback = "The independent answer check returned an invalid response. Recreate and carefully verify every objective answer."
-            if attempt == 1:
+        verification = None
+        for verification_attempt in range(2):
+            try:
+                verification = await verify_exam_questions(
+                    request.subject,
+                    request.topic,
+                    request.class_level,
+                    objective_questions,
+                )
+                break
+            except httpx.HTTPError as error:
+                response_status = error.response.status_code if isinstance(error, httpx.HTTPStatusError) else None
+                logger.warning(
+                    "Local exam verification attempt %s failed: %s (status %s)",
+                    verification_attempt + 1,
+                    type(error).__name__,
+                    response_status,
+                )
                 raise HTTPException(
                     status_code=502,
-                    detail="Gemma could not verify the exam answers. Please try again.",
+                    detail="Could not verify exam answers with the local model. Check Ollama and try again.",
                 ) from error
-            continue
+            except (ValueError, TypeError, KeyError) as error:
+                logger.warning(
+                    "Local exam verification attempt %s returned an invalid response: %s",
+                    verification_attempt + 1,
+                    type(error).__name__,
+                )
+                if verification_attempt == 1:
+                    raise HTTPException(
+                        status_code=502,
+                        detail="Gemma could not verify the exam answers. Please try again.",
+                    ) from error
+        if verification is None:
+            raise HTTPException(
+                status_code=502,
+                detail="Gemma could not verify the exam answers. Please try again.",
+            )
 
         checks = verification.get("checks") if isinstance(verification, dict) else None
         expected_ids = {question["question_id"] for question in objective_questions}
@@ -631,7 +751,7 @@ async def create_exam(request: ExamRequest):
             validation_feedback = " ".join(issues)[:1200]
             logger.warning(
                 "Local exam verification attempt %s rejected objective answers: %s",
-                attempt + 1,
+                verification_attempt + 1,
                 validation_feedback,
             )
             if attempt == 1:
@@ -639,6 +759,20 @@ async def create_exam(request: ExamRequest):
                     status_code=502,
                     detail="Gemma could not produce objective answers that passed independent verification. Please try again.",
                 )
+            if valid_checks:
+                question_feedback_by_index = {
+                    check["question_id"]: (
+                        "The independent answer check rejected this question. "
+                        f"{check['issue'] or check['reasoning']} "
+                        f"Computed answer: {check['computed_answer']}. "
+                        "Correct the question, options, expected answer, and explanation together."
+                    )
+                    for check in checks
+                    if not check["valid"]
+                }
+                validation_feedback = ""
+            else:
+                question_feedback_by_index = None
             continue
 
         questions = candidate

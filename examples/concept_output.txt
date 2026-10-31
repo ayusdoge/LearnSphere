@@ -1,0 +1,22 @@
+Imagine you are standing on a fast-moving bus. If the bus suddenly stops, what happens to you? You tend to keep moving forward, right? That's Newton's First Law in action!
+
+Newton's First Law of Motion simply says:
+
+> "An object at rest stays at rest, and an object in motion stays in motion with the same speed and in the same direction, unless an outside force acts on it."
+
+Let's break this down using simple language:
+
+"Object at rest stays at rest": If something isn't moving (like a book sitting on a table), it will keep sitting there doing nothing until something pushes or pulls it (like you picking up the book).
+"Object in motion stays in motion": If something is moving (like a cricket ball flying through the air), it will keep moving in a straight line at the same speed unless a force changes it (like the ball hitting the ground or being caught).
+The Key Idea (The Unseen Force):
+Everything tends to keep doing what it's already doing. We need an outside force (like a push, a pull, or friction) to make a change—to start the movement, stop the movement, or change the direction.
+
+Relatable Indian Example: The Toffee Packet
+
+Imagine you are walking along, and you are carrying a packet of toffees.
+
+At Rest: When you are standing still, the packet of toffees is at rest. It will stay still unless you (the outside force) start moving or you drop it.
+In Motion: As you walk, the packet is in motion. If you suddenly stop walking (applying a stopping force), the packet will tend to keep moving forward for a tiny moment before it settles down because of friction.
+In short: Things are "stubborn." They like to keep doing what they are currently doing until a strong enough force convinces them to change!
+
+
