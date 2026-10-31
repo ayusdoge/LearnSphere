@@ -1,31 +1,144 @@
-LearnSphere — One AI Tutor. Endless Learning Possibilities.
+# LearnSphere — One AI Tutor. Endless Learning Possibilities.
 
-LearnSphere is an AI-powered educational platform built with a simple goal: to make quality education accessible to every student, regardless of their location, financial background, or access to reliable internet connectivity.
+## Hacktoberfest 2026 | Hack Day Sonipat
 
-Many students, especially those in rural and underserved areas, have limited access to teachers, learning resources, and stable internet connections. LearnSphere aims to bridge this gap by providing a single intelligent AI learning companion capable of supporting students across multiple subjects and skills through one unified platform.
+### Team Information
 
-Instead of using different applications for studying, note-making, coding, practising questions, and understanding concepts, students can use LearnSphere as their all-in-one learning assistant. A student can ask questions, explore difficult concepts, generate revision material, practise for exams, learn programming, and interact with educational resources according to their individual learning needs.
+**Team Name:** Monster Energy
 
-Key Features
+**Team Members:**
+1. Ayush Rawat
+2. Yuvraj Rai
+3. Samar Sethi
 
-AI Learning Assistant: Students can ask questions across different subjects and receive clear, personalised, and easy-to-understand explanations.
+**Selected Problem Statement:** Problem Statement 08 — Build Anything with Gemma 4: Local AI Innovation Challenge
 
-Concept Explanation: Complex concepts can be broken down into simple, step-by-step explanations supported by relevant examples.
+**Project Name:** LearnSphere
 
-Smart Notes: LearnSphere can transform topics and learning materials into structured notes, summaries, key points, and revision material.
+**Category:** Generative AI | Offline Education | Local AI | Educational Technology
 
-Practice and Quizzes: Students can generate topic-based questions, MCQs, practice exercises, and quizzes to test their understanding.
+---
 
-Programming Support: Learners can study programming concepts, understand code, identify errors, debug programs, and practise coding with AI assistance.
+## 1. Project Overview
 
-Study Material Assistance: Students can interact with textbooks, PDFs, notes, and other educational resources instead of simply reading them passively.
+LearnSphere is an AI-powered educational platform designed to make quality education accessible to everyone, especially students in rural and underserved communities where reliable internet connectivity is limited.
 
-Personalised Learning: LearnSphere can adapt the depth, difficulty, and style of explanations according to a student's understanding and learning requirements.
+Our goal is to develop a unified, intelligent learning companion that helps students understand concepts, practise questions, prepare for examinations, learn programming, and explore different subjects without depending on cloud-based AI services.
 
-Offline Accessibility: One of LearnSphere's core goals is to support local AI inference and locally available educational resources. This can allow essential learning capabilities to remain available even when internet connectivity is limited or unavailable.
+Powered by Google's Gemma 4 model running locally, LearnSphere aims to provide personalised educational assistance while prioritising accessibility, privacy, and offline functionality.
 
-Our Vision
+**Our Mission:** Make intelligent learning assistance accessible beyond the limitations of internet connectivity and geographical location.
 
-LearnSphere envisions a future where access to intelligent educational support is not determined by geography or connectivity. By combining AI-powered personalised learning with offline accessibility, we aim to give students greater independence and the ability to learn whenever and wherever they need.
+## 2. Problem Statement
 
-One assistant. Every subject. Learning without limits.
+Students can face barriers to quality educational resources, particularly in areas with unreliable internet connectivity and limited access to personalised academic support.
+
+Many AI-powered educational tools depend on continuous internet access and cloud-based processing, making them less suitable for students in low-connectivity environments.
+
+LearnSphere aims to address this challenge by exploring how locally running AI models can deliver useful educational assistance without relying on cloud AI infrastructure.
+
+## 3. Proposed Solution
+
+LearnSphere will provide a single AI-powered learning platform capable of assisting students across multiple subjects and educational activities.
+
+Instead of requiring students to switch between different tools for explanations, notes, quizzes, and programming assistance, LearnSphere aims to bring these capabilities together in one unified learning environment.
+
+The core AI functionality will be powered by Gemma 4 running locally through Ollama, allowing the application to process educational queries without sending them to external AI services.
+
+## 4. Planned Key Features
+
+### AI Learning Assistant
+A unified AI assistant for answering academic questions, providing explanations, and supporting independent learning.
+
+### Concept Explanation
+Break down complex topics into simple, step-by-step explanations supported by relevant examples.
+
+### Smart Notes
+Generate concise summaries, structured revision notes, and topic-based study materials.
+
+### Practice and Quizzes
+Create multiple-choice questions, topic-based exercises, and practice tests to support active learning.
+
+### Programming Support
+Help students understand programming concepts, interpret errors, and practise coding.
+
+### Study Material Assistance
+Allow students to interact with locally available textbooks, PDFs, and educational resources.
+
+### Personalised Learning
+Adapt explanations, examples, and learning support according to students' questions and learning preferences.
+
+### Offline Accessibility
+Enable local AI inference and access to locally stored educational resources without requiring continuous internet connectivity.
+
+## 5. AI Model Selection and Justification
+
+**Selected AI Model:** Google Gemma 4
+
+**Planned Model Variant:** `gemma4:e4b`
+
+**Execution Environment:** Ollama
+
+**Inference Mode:** Local, on-device AI inference
+
+### Why Gemma 4?
+
+- **Offline Capability:** Gemma 4 can run locally, allowing educational assistance without cloud-based AI inference.
+- **Accessibility:** Smaller model variants offer a practical starting point for developing AI applications on consumer laptops.
+- **Privacy:** Educational queries can be processed locally without transmitting them to external AI services.
+- **Versatility:** A general-purpose language model can support explanations, summarisation, question generation, and programming assistance.
+- **Hackathon Compatibility:** Gemma 4 aligns with the mandatory model requirements of Problem Statement 08.
+
+The final model configuration will be selected based on local hardware compatibility, memory requirements, and inference performance.
+
+No Gemini API, cloud-based AI inference service, or additional AI model will be used.
+
+## 6. Proposed Technical Approach
+
+LearnSphere will follow a local-first architecture:
+
+1. Students interact with the LearnSphere application through a user-friendly interface.
+2. The application processes learning requests and prepares relevant context.
+3. Locally available educational resources are retrieved when needed.
+4. Gemma 4, running through Ollama, generates the educational response.
+5. The application displays explanations, notes, quizzes, or programming guidance to the student.
+
+The architecture is intended to support offline operation after the required software, model weights, and educational resources have been installed.
+
+## 7. Intended Users
+
+LearnSphere is designed primarily for:
+
+- Students in rural and underserved communities.
+- Learners with unreliable internet connectivity.
+- Students seeking affordable academic assistance.
+- Self-learners exploring new subjects and skills.
+- Educational institutions interested in local AI-powered learning tools.
+
+## 8. Future Scope
+
+Beyond the initial hackathon prototype, LearnSphere may explore:
+
+- Multilingual learning assistance.
+- Curriculum-aligned educational content.
+- Student progress tracking.
+- Shared local AI infrastructure for schools and community learning centres.
+- Lightweight interfaces for affordable devices.
+- Offline educational resource libraries.
+
+These are future development directions and are not claimed as completed hackathon features.
+
+## 9. Project Vision
+
+We believe quality education should not be limited by geographical location, financial circumstances, or internet connectivity.
+
+LearnSphere aims to make intelligent educational support more accessible, inclusive, and independent by bringing AI-powered learning capabilities closer to students.
+
+Our long-term vision is to build an educational ecosystem where learners can access meaningful academic guidance even in environments with limited connectivity.
+
+**One assistant. Every subject. Learning without limits.**
+
+---
+
+**Team Monster Energy**  
+**Hacktoberfest 2026 — Problem Statement 08: Gemma 4 Local AI Innovation Challenge**
