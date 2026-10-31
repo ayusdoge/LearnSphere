@@ -155,7 +155,16 @@ class LearnSphereApiTests(unittest.IsolatedAsyncioTestCase):
         ]
         sources = [{"citation": "biology.md — Photosynthesis", "text": "Plants use carbon dioxide."}]
         mock_generate = AsyncMock(return_value={"questions": questions})
-        mock_verify = AsyncMock(side_effect=lambda _, __, ___, objective: make_exam_verification(objective))
+        verification_calls = 0
+
+        async def verify_with_transient_invalid_response(_, __, ___, objective):
+            nonlocal verification_calls
+            verification_calls += 1
+            if verification_calls == 1:
+                raise ValueError("Local exam verification returned invalid JSON.")
+            return make_exam_verification(objective)
+
+        mock_verify = AsyncMock(side_effect=verify_with_transient_invalid_response)
         with patch.object(main, "find_relevant_sources", return_value=sources), patch.object(
             main, "generate_exam_questions", new=mock_generate
         ), patch.object(main, "verify_exam_questions", new=mock_verify):
@@ -185,7 +194,7 @@ class LearnSphereApiTests(unittest.IsolatedAsyncioTestCase):
         mock_generate.assert_awaited_once_with(
             "Science", "Photosynthesis", "Class 8", "English", 3, sources
         )
-        mock_verify.assert_awaited_once()
+        self.assertEqual(mock_verify.await_count, 2)
 
     async def test_exam_rejects_invalid_request_and_model_output(self):
         invalid_request = await self.client.post(
@@ -308,7 +317,7 @@ class LearnSphereApiTests(unittest.IsolatedAsyncioTestCase):
         ]
         mock_generate = AsyncMock(side_effect=[
             {"questions": questions},
-            {"questions": questions},
+            {"questions": [questions[0]]},
         ])
         mock_verify = AsyncMock(side_effect=[
             make_exam_verification(
@@ -335,7 +344,62 @@ class LearnSphereApiTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(mock_generate.await_count, 2)
-        self.assertIn("Question 1", mock_generate.await_args_list[1].kwargs["validation_feedback"])
+        self.assertEqual(mock_generate.await_args_list[1].kwargs["question_indices"], [0])
+        self.assertIn(
+            "independent answer check rejected",
+            mock_generate.await_args_list[1].kwargs["question_feedback_by_index"][0],
+        )
+
+    async def test_exam_normalizes_type_specific_fields_before_validation(self):
+        mcq = main.normalize_exam_question_fields(
+            {
+                "question_type": "multiple_choice",
+                "options": ["A", "B", "C", "D"],
+                "correct_index": 0,
+                "expected_answer": "B",
+                "accepted_answers": ["B"],
+                "max_marks": 3,
+                "grading_criteria": "not used",
+            },
+            0,
+        )
+        fill_blank = main.normalize_exam_question_fields(
+            {
+                "question_type": "fill_blank",
+                "question": "The answer is ____.",
+                "options": ["wrong"],
+                "correct_index": 0,
+                "accepted_answers": [],
+                "expected_answer": "42",
+                "max_marks": 3,
+                "grading_criteria": "not used",
+            },
+            1,
+        )
+        reflective = main.normalize_exam_question_fields(
+            {
+                "question_type": "reflective",
+                "options": ["wrong"],
+                "correct_index": 0,
+                "accepted_answers": ["wrong"],
+                "expected_answer": "A constant does not change as x changes.",
+                "max_marks": 1,
+                "grading_criteria": "",
+            },
+            2,
+        )
+
+        self.assertEqual(mcq["correct_index"], 1)
+        self.assertEqual(mcq["accepted_answers"], [])
+        self.assertEqual(mcq["max_marks"], 1)
+        self.assertEqual(fill_blank["options"], [])
+        self.assertIsNone(fill_blank["correct_index"])
+        self.assertEqual(fill_blank["accepted_answers"], ["42"])
+        self.assertEqual(fill_blank["max_marks"], 1)
+        self.assertEqual(reflective["options"], [])
+        self.assertIsNone(reflective["correct_index"])
+        self.assertEqual(reflective["max_marks"], 3)
+        self.assertTrue(reflective["grading_criteria"])
 
     async def test_exam_verifier_uses_local_ollama_and_requires_calculation_checks(self):
         verification = {
@@ -377,6 +441,7 @@ class LearnSphereApiTests(unittest.IsolatedAsyncioTestCase):
             "options": ["4", "6", "8", "10"],
             "correct_index": 1,
             "expected_answer": "6",
+            "explanation": "This field is for student feedback, not verification.",
         }]
         with patch.object(gemma.httpx, "AsyncClient", return_value=client):
             result = await gemma.verify_exam_questions(
@@ -386,10 +451,12 @@ class LearnSphereApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result, verification)
         self.assertEqual(client.url, gemma.OLLAMA_URL)
         self.assertEqual(client.payload["model"], gemma.MODEL_NAME)
-        self.assertIn("substitute every given value", client.payload["messages"][1]["content"])
+        self.assertIn("check the key calculation", client.payload["messages"][1]["content"])
+        self.assertNotIn("student feedback", client.payload["messages"][1]["content"])
         self.assertEqual(client.payload["format"]["properties"]["checks"]["minItems"], 1)
+        self.assertEqual(client.payload["options"]["num_predict"], 512)
 
-    async def test_exam_generation_builds_one_constrained_question_per_local_request(self):
+    async def test_exam_generation_repairs_malformed_question_before_continuing(self):
         class MockResponse:
             def __init__(self, content):
                 self.content = content
@@ -415,7 +482,11 @@ class LearnSphereApiTests(unittest.IsolatedAsyncioTestCase):
                 question_type = json["format"]["properties"]["question_type"]["enum"][0]
                 difficulty = json["format"]["properties"]["difficulty"]["enum"][0]
                 content = {
-                    "question": "Which rule differentiates x squared?",
+                    "question": (
+                        "The derivative of x squared is ____."
+                        if question_type == "fill_blank"
+                        else "Which rule differentiates x squared?"
+                    ),
                     "question_type": question_type,
                     "difficulty": difficulty,
                     "options": ["2x", "x", "x squared", "1"] if question_type == "multiple_choice" else [],
@@ -426,6 +497,8 @@ class LearnSphereApiTests(unittest.IsolatedAsyncioTestCase):
                     "grading_criteria": "Award marks for the key ideas." if question_type == "reflective" else "",
                     "explanation": "The power rule gives the derivative 2x.",
                 }
+                if len(self.calls) == 1:
+                    content["expected_answer"] = ""
                 return MockResponse(content)
 
         client = MockOllamaClient()
@@ -436,7 +509,7 @@ class LearnSphereApiTests(unittest.IsolatedAsyncioTestCase):
 
         questions = result["questions"]
         self.assertEqual(len(questions), 5)
-        self.assertEqual(len(client.calls), 5)
+        self.assertEqual(len(client.calls), 6)
         self.assertEqual(
             [(question["question_type"], question["difficulty"]) for question in questions],
             [
@@ -449,6 +522,27 @@ class LearnSphereApiTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertTrue(all(url == gemma.OLLAMA_URL for url, _ in client.calls))
         self.assertTrue(all(payload["model"] == gemma.MODEL_NAME for _, payload in client.calls))
+        self.assertIn(
+            "expected_answer",
+            client.calls[1][1]["messages"][1]["content"],
+        )
+
+        subset_client = MockOllamaClient()
+        with patch.object(gemma.httpx, "AsyncClient", return_value=subset_client):
+            subset = await gemma.generate_exam_questions(
+                "Maths",
+                "Differentiation",
+                "Class 12",
+                "English",
+                5,
+                [],
+                question_feedback_by_index={3: "The computed answer is 2x."},
+                question_indices=[3],
+            )
+        self.assertEqual(len(subset["questions"]), 1)
+        self.assertEqual(subset["questions"][0]["question_type"], "multiple_choice")
+        self.assertEqual(subset["questions"][0]["difficulty"], "medium")
+        self.assertIn("The computed answer is 2x.", subset_client.calls[0][1]["messages"][1]["content"])
 
     async def test_exam_grades_reflective_answers_with_local_model(self):
         response_data = {
